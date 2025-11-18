@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://github.com/savagame/app-of-apps.git
     targetRevision: main
-    path: ./app-of-app/simple-webapps
+    path: ./app-of-apps/simple-webapps
     directory:
       recurse: true
   destination:
