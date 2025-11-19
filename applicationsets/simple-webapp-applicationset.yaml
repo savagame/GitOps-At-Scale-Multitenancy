@@ -25,5 +25,9 @@ spec:
       destination:
         name: "{{name}}"
         namespace: "argocd"
+      syncPolicy:
+        automated:
+          prune: false
+          selfHeal: true
         syncOptions:
           - CreateNamespace=true
