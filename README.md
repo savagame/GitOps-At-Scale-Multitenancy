@@ -52,3 +52,30 @@ spec:
 
 The path attribute instructs Argo CD to target a specific directory – in this case, named simple-webapps – located within the repository. This directory contains Kubernetes manifests that define the applications, as well as supporting various formats such as Helm, Kustomize.
 In the provided configuration, there are two notable attributes worth highlighting: selfHeal: true and directory.recurse: true. The selfHeal feature ensures automatic updates of the child applications in response to any changes detected, maintaining consistent deployment states. Additionally, the recurse setting enables the iteration through the webapps folders, facilitating the deployment of all applications contained within.
+
+## Effective Git repository strategies
+
+### Environment per branches
+
+The environment-per-branch approach in GitOps, which involves using branches to represent different environments such as staging or production, is often considered an anti-pattern.
+I created 3 branches for this strategy: qa, staging, prod
+
+```
+⚠️ This Is Where Problems Happen (READ)
+
+You will get:
+
+merge conflicts
+
+environment drift
+
+broken pipelines
+
+config duplication
+
+cherry-pick hell
+
+accidental prod changes
+
+YAMLs diverging over time
+```
