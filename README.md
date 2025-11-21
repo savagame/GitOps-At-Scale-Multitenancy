@@ -106,3 +106,206 @@ cp overlays/stage/patch.yaml overlays/prod/patch.yaml
 git commit -am "Promote Stage to Prod"
 git push
 ```
+
+### Native Multinenancy with ArgoCD
+
+Step 1 – Install Argo CD core
+
+```
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+```
+
+Step 2 – Create tenant namespace (devteam-a)
+
+```
+kubectl create namespace devteam-a
+```
+
+Step 3 – Create the AppProject for devteam-a
+
+```
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: devteam-a
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Enable DevTeam-A Project to deploy new applications
+  sourceRepos:
+    - "*"
+  destinations:
+    - namespace: "devteam-a"
+      server: https://kubernetes.default.svc
+
+  clusterResourceBlacklist:
+    - group: ""
+      kind: "Namespace"
+
+  namespaceResourceBlacklist:
+    - group: "argoproj.io"
+      kind: "AppProject"
+    - group: "argoproj.io"
+      kind: "Application"
+    - group: ""
+      kind: "ResourceQuota"
+    - group: "networking.k8s.io"
+      kind: "NetworkPolicy"
+```
+
+Apply:
+
+```
+kubectl apply -f argocd-project-devteam-a.yaml
+```
+
+Step 4 – Prepare a Git repo for devteam-a
+
+```
+git clone <your-repo-url> devteam-a-application
+cd devteam-a-application
+mkdir -p applicationset
+mkdir -p applicationset/nginx-app
+```
+
+Create a very simple nginx deployment + service:
+
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+spec:
+  selector:
+    app: nginx
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+```
+
+Commit & push:
+
+```
+git add .
+git commit -m "Initial nginx app for devteam-a"
+git push
+```
+
+Step 5 – Create the “initializer” Application for devteam-a
+
+```
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: application-initializer-devteam-a
+  namespace: argocd
+spec:
+  project: devteam-a
+  source:
+    repoURL: <YOUR-REPO-URL>
+    targetRevision: main
+    path: ./applicationset
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: devteam-a
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+```
+
+Apply:
+
+```
+kubectl apply -f application-initializer-devteam-a.yaml
+```
+
+Step 6 – Verify in Argo CD
+
+```
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+```
+
+Step 7 – Confirm the app is running in devteam-a
+
+```
+kubectl get pods -n devteam-a
+kubectl get svc -n devteam-a
+```
+
+Step 8 – See the multitenancy constraints in action
+
+```
+8.1 Try to create a Namespace (should be blocked)
+Add this to applicationset/nginx-app/namespace.yaml:
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: i-am-not-allowed-here
+
+Commit & push.
+Argo CD will try to sync, and you should see an error because:
+
+clusterResourceBlacklist:
+  - group: ""
+    kind: "Namespace"
+
+That’s exactly the kind of protection you read about.
+```
+
+```
+8.2 Try to create another Application (should be blocked)
+In the same repo, add:
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: devteam-trying-to-cheat
+spec: {}
+
+Push again.
+Sync should fail for that resource because Application is blacklisted in namespaceResourceBlacklist.
+
+This proves the AppProject restrictions are working.
+```
+
+Step 9 – Scaling the pattern (more teams)
+
+```
+To add a new team devteam-b in the same “core Argo CD” model:
+
+Create new namespace devteam-b
+
+Create AppProject devteam-b with its own blacklist and dest namespace
+
+Create Application application-initializer-devteam-b pointing to their own repo
+```
