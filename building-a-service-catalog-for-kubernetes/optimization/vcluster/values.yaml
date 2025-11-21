@@ -1,0 +1,10 @@
+vcluster:
+  securityContext:
+    runAsUser: 12345
+    runAsGroup: 12345
+    runAsNonRoot: true
+
+  fsGroup: 12345
+
+  isolation:
+    enabled: true
